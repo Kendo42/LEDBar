@@ -14,6 +14,9 @@
         - Modified effects to utilise primary colours and effect frequencies
         - Removed unused variables
         - Reworked effect IDs
+    Change 20/02/21
+        - Fixed errors with variable names
+        - Implimented soft delay into effects
 */
 
 U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0); // I2C / TWI <-- Constructor call for the LCD display library
@@ -39,13 +42,13 @@ int UP_BUTTON_STATE = 0;
  *   +-------------+
  */
 
-const LED_COUNT 27;   // Total number of LED's in lightbar  | NOTE: THIS MUST BE HARDCODED FOR EVERY DIFFERENT LIGHTBAR
-const LED_DATA_PIN 7; // Data pin number
+const int LED_COUNT = 27;   // Total number of LED's in lightbar  | NOTE: THIS MUST BE HARDCODED FOR EVERY DIFFERENT LIGHTBAR
+const int LED_DATA_PIN = 7; // Data pin number
 
 int BOTTOM_INDEX = 0;
 int TOP_INDEX = int(LED_COUNT / 2);
 int EVENODD = LED_COUNT % 2;
-struct CRGB LEDS[LED_COUNT];
+struct CRGB leds[LED_COUNT];
 int LED_X[LED_COUNT][3]; // Array for copying what is currently in the leds (for CELL-AUTOMATA, MARCH, ETC)
 
 int FX_DELAY = 20;          // FX loops delay var
@@ -62,6 +65,9 @@ int I_HUE = 0;             // Hue (0-255)
 int I_BRIGHTNESS = 0;      // Brightness (0-255)
 int BOUNCED_DIRECTION = 0; // Switch for colour bounce (0-1)
 float T_COUNT = 0.0;       // Inc var for sin loops
+
+unsigned long eventInterval = 20;
+unsigned long previousTime = 0;
 
 // Function to find the index of horizontal opposite LED
 int horizontal_index(int i)
@@ -85,7 +91,7 @@ int horizontal_index(int i)
 void setup()
 {
     DMXSerial.init(DMXReceiver);     // initialising our DMX object?
-    START_ADDRESS = EEPROMReadInt(0) // persistant start address between reboots
+    START_ADDRESS = EEPROMReadInt(0); // persistant start address between reboots
 
         pinMode(8, OUTPUT); // Pin is for display
     pinMode(10, INPUT);     // Pin is for DMX addr up button
@@ -101,7 +107,7 @@ void setup()
     DMXSerial.write(START_ADDRESS + 6, LED_COUNT); // End LED
 
     LEDS.setBrightness(FX_MAX_BRIGHTNESS);
-    LEDS.addLeds<WS2811, LED_DATA_PIN, GRB>(LEDS, LED_COUNT); // Initialising LED strip
+    LEDS.addLeds<WS2811, LED_DATA_PIN, GRB>(leds, LED_COUNT); // Initialising LED strip
 
     u8g.firstPage();
     do
@@ -116,9 +122,8 @@ void loop()
     DOWN_BUTTON_STATE = digitalRead(10); // Reading in button
     UP_BUTTON_STATE = digitalRead(11);   // ^
 
-    if (1 == 2) //if (DownButtonState == HIGH) {
+    if (DOWN_BUTTON_STATE == HIGH && START_ADDRESS > 0) //if (DownButtonState == HIGH) {
     {
-        START_ADDRESS = EEPROMReadInt(0);
         START_ADDRESS--;
         EEPROMWriteInt(0, START_ADDRESS);
         u8g.firstPage();
@@ -128,9 +133,8 @@ void loop()
         } while (u8g.nextPage());
     }
 
-    if (1 == 2) //if (UpButtonState == HIGH) {
+    if (UP_BUTTON_STATE == HIGH && START_ADDRESS < 512) //if (UpButtonState == HIGH) {
     {
-        START_ADDRESS = EEPROMReadInt(0);
         START_ADDRESS++;
         EEPROMWriteInt(0, START_ADDRESS);
         u8g.firstPage();
@@ -215,7 +219,7 @@ void loop()
 
 void DisplayAddress(void)
 {
-    itoa(StartingAddress, StartingAddressStr, 10);
+    itoa(START_ADDRESS, START_ADDRESS_STR, 10);
     u8g.setFont(u8g_font_unifont);
     u8g.drawStr(1, 15, "DMX Address:");
     u8g.drawStr(98, 15, START_ADDRESS_STR);
@@ -263,51 +267,46 @@ void ClearLEDs()
 }
 
 // Applies a solid colour to range of LEDs
-void SolidColour()
-{
-    for (int i = FX_START_LED; i < FX_END_LED; i++)
-    {
-        LEDS[i] = CHSV(FX_HUE, FX_SAT, FX_BRIGHTNESS)
+void SolidColour(){
+    for (int i = FX_START_LED; i < FX_END_LED; i++){
+        leds[i] = CHSV(FX_HUE, FX_SAT, FX_BRIGHTNESS);
     }
     LEDS.show();
 }
 
-void BallBounce()
-{ //Ball Bounce
-    if (BOUNCED_DIRECTION == 0)
-    {
+void BallBounce(){ //Ball Bounce
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
+    if (BOUNCED_DIRECTION == 0){
         I_DEX = I_DEX + 1;
-        if (I_DEX == LED_COUNT)
-        {
+        if (I_DEX == LED_COUNT){
             BOUNCED_DIRECTION = 1;
             I_DEX = I_DEX - 1;
         }
     }
-    if (BOUNCED_DIRECTION == 1)
-    {
+    if (BOUNCED_DIRECTION == 1){
         I_DEX = I_DEX - 1;
-        if (I_DEX == 0)
-        {
+        if (I_DEX == 0){
             BOUNCED_DIRECTION = 0;
         }
     }
-    for (int i = 0; i < LED_COUNT; i++)
-    {
-        if (i == I_DEX)
-        {
-            LEDS[i] = CHSV(FX_HUE, FX_SAT, FX_BRIGHTNESS);
+    for (int i = 0; i < LED_COUNT; i++){
+        if (i == I_DEX){
+            leds[i] = CHSV(FX_HUE, FX_SAT, FX_BRIGHTNESS);
         }
-        else
-        {
-            LEDS[i] = CHSV(0, 0, 0);
+        else{
+            leds[i] = CHSV(0, 0, 0);
         }
     }
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void RainbowFade()
 { //Rainbow Fade
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_HUE++;
     if (I_HUE > 255)
     {
@@ -315,138 +314,145 @@ void RainbowFade()
     }
     for (int I_DEX = 0; I_DEX < LED_COUNT; I_DEX++)
     {
-        LEDS[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+        leds[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
     }
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void RainbowLoop()
 { //Rainbow Loop
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_DEX++;
     I_HUE = I_HUE + FX_STEP;
-    if (I_DEX >= LED_COUNT)
-    {
+    if (I_DEX >= LED_COUNT){
         I_DEX = 0;
     }
-    if (I_HUE > 255)
-    {
+    if (I_HUE > 255){
         I_HUE = 0;
     }
-    LEDS[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+    leds[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void RainbowLoop2()
 { //Rainbow Loop 2
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_HUE -= 1;
-    fill_rainbow(LEDS, LED_COUNT, I_HUE);
+    fill_rainbow(leds, LED_COUNT, I_HUE);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
-void RandomColour()
-{ //Random Colour
+void RandomColour(){ //Random Colour
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_DEX = random(0, LED_COUNT);
     I_HUE = random(0, 255);
-    LEDS[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+    leds[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void FadeColour()
 { //Fade One Colour
-    if (BOUNCED_DIRECTION == 0)
-    {
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
+    if (BOUNCED_DIRECTION == 0){
         I_BRIGHTNESS++;
-        if (I_BRIGHTNESS >= 255)
-        {
+        if (I_BRIGHTNESS >= 255){
             BOUNCED_DIRECTION = 1;
         }
     }
-    if (BOUNCED_DIRECTION == 1)
-    {
+    if (BOUNCED_DIRECTION == 1){
         I_BRIGHTNESS = I_BRIGHTNESS - 1;
-        if (I_BRIGHTNESS <= 1)
-        {
+        if (I_BRIGHTNESS <= 1){
             BOUNCED_DIRECTION = 0;
         }
     }
-    for (int I_DEX = 0; I_DEX < LED_COUNT; I_DEX++)
-    {
-        LEDS[I_DEX] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
+    for (int I_DEX = 0; I_DEX < LED_COUNT; I_DEX++){
+        leds[I_DEX] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
     }
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void MoveToCenter()
 { //Move To Center
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_DEX++;
-    if (I_DEX > TOP_INDEX)
-    {
+    if (I_DEX > TOP_INDEX){
         I_DEX = 0;
     }
     int idexA = I_DEX;
     int idexB = horizontal_index(idexA);
     I_BRIGHTNESS = I_BRIGHTNESS + 10;
-    if (I_BRIGHTNESS > 255)
-    {
+    if (I_BRIGHTNESS > 255){
         I_BRIGHTNESS = 0;
     }
-    LEDS[idexA] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
-    LEDS[idexB] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
+    leds[idexA] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
+    leds[idexB] = CHSV(FX_HUE, FX_SAT, I_BRIGHTNESS);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void RainbowMoveToCenter()
 { //Rainbow Move To Center
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_DEX++;
-    if (I_DEX > TOP_INDEX)
-    {
+    if (I_DEX > TOP_INDEX){
         I_DEX = 0;
     }
     I_HUE = I_HUE + FX_STEP;
-    if (I_HUE > 255)
-    {
+    if (I_HUE > 255){
         I_HUE = 0;
     }
     int idexA = I_DEX;
     int idexB = horizontal_index(idexA);
-    LEDS[idexA] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
-    LEDS[idexB] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+    leds[idexA] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+    leds[idexB] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
 
 void RandomStrobe()
 { //Random Strobe
     int temprand;
-    for (int i = 0; i < LED_COUNT; i++)
-    {
+    for (int i = 0; i < LED_COUNT; i++){
         temprand = random(0, 100);
-        if (temprand > 50)
-        {
-            LEDS[i].r = 255;
+        if (temprand > 50){
+            leds[i].r = 255;
         }
-        if (temprand <= 50)
-        {
-            LEDS[i].r = 0;
+        if (temprand <= 50){
+            leds[i].r = 0;
         }
-        LEDS[i].b = 0;
-        LEDS[i].g = 0;
+        leds[i].b = 0;
+        leds[i].g = 0;
     }
     LEDS.show();
 }
 
 void RandomRainbowStrobe()
 { //Random Rainbow Strobe
+  unsigned long currentTime = millis();
+  if (currentTime - previousTime >= eventInterval) {
     I_DEX = random(0, LED_COUNT);
     I_HUE = random(0, 255);
     FastLED.clear(); // clear all pixel data
-    LEDS[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
+    leds[I_DEX] = CHSV(I_HUE, FX_SAT, FX_BRIGHTNESS);
     LEDS.show();
-    delay(FX_DELAY);
+    previousTime = currentTime;
+  }
 }
