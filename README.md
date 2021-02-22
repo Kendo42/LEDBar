@@ -3,7 +3,7 @@
 
 The light bars utilise the DMX protocol to intergrate with existing lighting desk based setups
 
-## Instalation guide
+## installation guide
 
 # Equipment
 1. Arduino (Tested on Arduino UNO)
