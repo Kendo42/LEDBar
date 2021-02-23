@@ -121,7 +121,12 @@ void setup()
 
 void loop()
 {
-    DisplayAddress(Connection);
+    u8g.firstPage();
+        do
+        {
+            DisplayAddress(Connection);
+        } while (u8g.nextPage());
+    
     DOWN_BUTTON_STATE = digitalRead(10); // Reading in button
     UP_BUTTON_STATE = digitalRead(11);   // ^
 
@@ -130,21 +135,12 @@ void loop()
         START_ADDRESS--;
         EEPROMWriteInt(0, START_ADDRESS);
         u8g.firstPage();
-        do
-        {
-            DisplayAddress(Connection);
-        } while (u8g.nextPage());
     }
 
     if (UP_BUTTON_STATE == HIGH && START_ADDRESS < 512) //if (UpButtonState == HIGH) {
     {
         START_ADDRESS++;
         EEPROMWriteInt(0, START_ADDRESS);
-        u8g.firstPage();
-        do
-        {
-            DisplayAddress(Connection);
-        } while (u8g.nextPage());
     }
 
     unsigned long LAST_PACKET = DMXSerial.noDataSince(); // Calculating how long since no data packet was received (in ms?)
