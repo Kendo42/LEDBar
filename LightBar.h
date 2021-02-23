@@ -17,6 +17,8 @@
     Change 20/02/21
         - Fixed errors with variable names
         - Implimented soft delay into effects
+    Change 23/02/21
+        - Added No DMX signal text on display
 */
 
 U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0); // I2C / TWI <-- Constructor call for the LCD display library
@@ -28,6 +30,7 @@ U8GLIB_SSD1306_128X64 u8g(U8G_I2C_OPT_NONE | U8G_I2C_OPT_DEV_0); // I2C / TWI <-
 
 int START_ADDRESS; // = 0
 char START_ADDRESS_STR[3];
+bool Connection = false;
 
 /*   +-----------------+
  *   |  Button  SETUP  |
@@ -112,13 +115,13 @@ void setup()
     u8g.firstPage();
     do
     {
-        DisplayAddress();
+        DisplayAddress(Connection);
     } while (u8g.nextPage());
 }
 
 void loop()
 {
-
+    DisplayAddress(Connection);
     DOWN_BUTTON_STATE = digitalRead(10); // Reading in button
     UP_BUTTON_STATE = digitalRead(11);   // ^
 
@@ -129,7 +132,7 @@ void loop()
         u8g.firstPage();
         do
         {
-            DisplayAddress();
+            DisplayAddress(Connection);
         } while (u8g.nextPage());
     }
 
@@ -140,7 +143,7 @@ void loop()
         u8g.firstPage();
         do
         {
-            DisplayAddress();
+            DisplayAddress(Connection);
         } while (u8g.nextPage());
     }
 
@@ -159,6 +162,7 @@ void loop()
 
     if (LAST_PACKET < 5000)
     {                                                      // If a packet has been received
+        Connection = true;
         FX_HUE = DMXSerial.read(START_ADDRESS);            // Read recent DMX values and set pwm levels
         FX_SAT = DMXSerial.read(START_ADDRESS + 1);        //
         FX_BRIGHTNESS = DMXSerial.read(START_ADDRESS + 2); //
@@ -212,17 +216,22 @@ void loop()
     }
     else
     {
+        Connection = false;
         FastLED.clear();
         LEDS.show();
     }
 }
 
-void DisplayAddress(void)
+void DisplayAddress(bool Connection)
 {
     itoa(START_ADDRESS, START_ADDRESS_STR, 10);
     u8g.setFont(u8g_font_unifont);
     u8g.drawStr(1, 15, "DMX Address:");
     u8g.drawStr(98, 15, START_ADDRESS_STR);
+    
+    if (Connection == false){
+      u8g.drawStr(1, 30, "NO CONNECTION");
+    }
 }
 
 void EEPROMWriteInt(int address, int value)
